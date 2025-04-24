@@ -1,0 +1,6 @@
+
+
+CUDA_VISIBLE_DEVICES=3 python src/test_debate.py --llama3_1 1 --llama3_2_3b 1 --qwen2_5 1 --mistral0_3 1 --phi3_small 1 --solver debate --data hellaswag --data_size 300 --debate_rounds 2
+
+
+

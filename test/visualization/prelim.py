@@ -1,0 +1,49 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# X-axis values
+x_values = np.linspace(0, 1, 11)
+
+# Time series data
+min_k = [13.045262843921483, 12.793877107837057, 12.857436006470754, 12.871195836709402, 12.988600643269404, 12.964257519398169, 12.908120620521155, 12.963456538468934, 13.05760388441814, 13.031640792525286, 13.027009535745476, 12.95285013887431, 12.894463308377553, 12.929729007697887, 12.923451147322787, 12.963202429204216, 12.912678835120584, 12.90562429027556, 12.880939596384014, 12.855709600792844, 12.827638368591247]
+min_k_fsd = [0.16980215321999026, 0.1806597915090169, 0.07066723653442608, 0.041752832449084565, -0.008066911857751435, 0.16449282101516793, 0.000962636604906919, 0.09876818091936457, 0.10575676787397725, 0.1427794078193454, 0.07495480736377402, 0.038167366732348995, 0.11156203241163887, 0.06480646437625026, 0.15124606428215337, 0.09271133737198411, 0.11012524194249629, 0.13736450126899236, 0.158405562611188, 0.15194176611867327, 0.11687897819237314]
+perplexity_score = [9.112635688765534, 8.875771196428719, 9.199173668769594, 9.279469872933062, 9.352791402482351, 9.273131279834104, 9.2258860648989, 9.237880218404547, 9.3536433765839, 9.35665550541362, 9.279506238050036, 9.195285185667684, 9.223483024033747, 9.332288130548914, 9.384235548574726, 9.297337773967078, 9.190892822886308, 9.137646513134392, 9.277404460593363, 9.203615179142027, 9.176523191168844]
+perplexity_score_fsd = [0.09479691324090211, 0.10578653687965023, 0.03529754009419506, 0.01654601167784442, -0.018925688875906843, 0.09931445302306408, -0.009396764242101341, 0.05370836192474471, 0.05563334098632744, 0.07849624455017334, 0.03363418841255594, 0.01274361628273546, 0.061761803871684506, 0.030106731565481937, 0.08748923393069852, 0.056264597944810646, 0.0676960778394875, 0.08778183104686654, 0.10257186653388395, 0.09824425947265247, 0.07456769891185466]
+srct = [0.6003957650599592, 0.13665546175818877, -0.3050212627155498, -0.1806824107373632, -0.13974641186437284, -0.9964987847903618, -0.3090192513371499, -0.557239648016913, 0.22772659916151405, -0.29214307511362875, 0.7486307898088718, 0.13031541287395995, 0.7323225822515328, 0.4192178463277756, -0.5299538338451465, -0.054309985228010005, -0.3313468195817184, -0.5858144996596802, 0.010339702676891657, 0.12473633504559416, -0.4606040176991598]
+min_k = [x for i, x in enumerate(min_k) if i%2==0]
+min_k_fsd = [x for i, x in enumerate(min_k_fsd) if i%2==0]
+perplexity_score = [x for i, x in enumerate(perplexity_score) if i%2==0]
+perplexity_score_fsd = [x for i, x in enumerate(perplexity_score_fsd) if i%2==0]
+srct = [x for i, x in enumerate(srct) if i%2==0]
+
+# Function for Z-score normalization
+def z_score_normalize(data):
+    mean = np.mean(data)
+    std_dev = np.std(data)
+    return [(value - mean) / std_dev for value in data]
+
+# Apply normalization
+min_k_norm = z_score_normalize(min_k)
+min_k_fsd_norm = z_score_normalize(min_k_fsd)
+perplexity_score_norm = z_score_normalize(perplexity_score)
+perplexity_score_fsd_norm = z_score_normalize(perplexity_score_fsd)
+srct_norm = z_score_normalize(srct)
+# Create a figure and axis
+plt.figure(figsize=(15, 8))
+
+# Plot each time series with specified styles
+plt.plot(x_values, min_k_norm, label='Min-K%', color='blue', linewidth=3.5, marker='^', markersize=10)
+plt.plot(x_values, min_k_fsd_norm, label='Min-K% + FSD', color='blue', linestyle='--', linewidth=3.5, marker='^', markersize=10)
+plt.plot(x_values, perplexity_score_norm, label='Perplexity Score', color='green', linewidth=3.5, marker='v', markersize=10)
+plt.plot(x_values, perplexity_score_fsd_norm, label='Perplexity Score + FSD', color='green', linestyle='--', linewidth=3.5, marker='v', markersize=10)
+plt.plot(x_values, srct_norm, label='SRCT', color='red', linewidth=3.5, marker='o', markersize=10)
+
+# Enhancing the plot for academic presentation
+plt.xlabel('Contamination Rate', fontsize=20)
+plt.ylabel('Normalized Score', fontsize=20)
+plt.legend(loc='best', fontsize=22)
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.tight_layout()
+
+# Display the plot
+plt.savefig('out/prelim.png')

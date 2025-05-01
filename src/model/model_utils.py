@@ -27,12 +27,12 @@ model_dirs = {
 }
 
 
-def get_agent_name(args, model_name, agent_idx, data_name):
-    data_size = args.data_size if args.data in ['arithmetics', 'easy_arithmetics', 'hellaswag','pro_medicine','gsm8k','csqa','hh_rlhf'] else None
-    if data_size is None :
-        return data_name + '__' + model_name + f'__Agent{agent_idx}'
-    else :
-        return data_name + '_' + str(data_size) + '__' + model_name + f'__Agent{agent_idx}'
+# def get_agent_name(args, model_name, agent_idx, data_name):
+#     data_size = args.data_size if args.data in ['arithmetics', 'easy_arithmetics', 'hellaswag','pro_medicine','gsm8k','csqa','hh_rlhf'] else None
+#     if data_size is None :
+#         return data_name + '__' + model_name + f'__Agent{agent_idx}'
+#     else :
+#         return data_name + '_' + str(data_size) + '__' + model_name + f'__Agent{agent_idx}'
 
 
 def engine(messages, agent, num_agents=1, stop_sequences=None):

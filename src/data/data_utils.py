@@ -120,144 +120,144 @@ def _load_data(args, split):
     else:
         raise ValueError("Unsupported dataset has been supplied")
 
-def format_input(args, query, response, tokenizer, model_name, dialog=False):
+# def format_input(args, query, response, tokenizer, model_name, dialog=False):
 
-    if model_name == 'bloomz' :
-        return f'<s>\n\nUSER: {query} \nASSISTANT: {response}</s>' if dialog else f'<s>\n\nUSER: {query} \nASSISTANT: '
-    elif model_name == 'gptj':
-        return f"<s>[INST] {query} [/INST] {response}</s>" if dialog else f"<s>[INST] {query} [/INST]"
-    inp = [{'role': 'user', 'content': query},{'role': 'assistant', 'content': response}] if dialog else [{'role': 'user', 'content': query}]
-    return tokenizer.apply_chat_template(inp, tokenize=False, add_generation_prompt=True)
+#     if model_name == 'bloomz' :
+#         return f'<s>\n\nUSER: {query} \nASSISTANT: {response}</s>' if dialog else f'<s>\n\nUSER: {query} \nASSISTANT: '
+#     elif model_name == 'gptj':
+#         return f"<s>[INST] {query} [/INST] {response}</s>" if dialog else f"<s>[INST] {query} [/INST]"
+#     inp = [{'role': 'user', 'content': query},{'role': 'assistant', 'content': response}] if dialog else [{'role': 'user', 'content': query}]
+#     return tokenizer.apply_chat_template(inp, tokenize=False, add_generation_prompt=True)
     
 
-def get_sample_num(seen_num, unseen_num, contamination):
-    if contamination == -1 :
-        return seen_num, unseen_num
-    total_size = min(seen_num, unseen_num)
+# def get_sample_num(seen_num, unseen_num, contamination):
+#     if contamination == -1 :
+#         return seen_num, unseen_num
+#     total_size = min(seen_num, unseen_num)
 
-    _sn_num = int(total_size * contamination)
-    _us_num = total_size - _sn_num
+#     _sn_num = int(total_size * contamination)
+#     _us_num = total_size - _sn_num
     
-    return _sn_num, _us_num
+#     return _sn_num, _us_num
 
     
-def batchify(data_list, batch_size):
-    batches = []
-    for i in range(0, len(data_list), batch_size):
-        batch = data_list[i:i + batch_size]
-        batch = pd.DataFrame(batch).to_dict('list')
-        batches.append(batch)
-    return batches
+# def batchify(data_list, batch_size):
+#     batches = []
+#     for i in range(0, len(data_list), batch_size):
+#         batch = data_list[i:i + batch_size]
+#         batch = pd.DataFrame(batch).to_dict('list')
+#         batches.append(batch)
+#     return batches
 
 
-def get_data_subsets(args, dataset):
-    '''
-        selects sample_size + landmark_size amount of data w.r.t. contamination rate
-    '''
-    dataset = dataset.shuffle(seed=args.seed)
-    in_dataset = Dataset.from_dict(dataset[[idx for idx, x in enumerate(dataset['label']) if x==1]])
-    out_dataset = Dataset.from_dict(dataset[[idx for idx, x in enumerate(dataset['label']) if x==0]])
+# def get_data_subsets(args, dataset):
+#     '''
+#         selects sample_size + landmark_size amount of data w.r.t. contamination rate
+#     '''
+#     dataset = dataset.shuffle(seed=args.seed)
+#     in_dataset = Dataset.from_dict(dataset[[idx for idx, x in enumerate(dataset['label']) if x==1]])
+#     out_dataset = Dataset.from_dict(dataset[[idx for idx, x in enumerate(dataset['label']) if x==0]])
     
-    in_num = int(args.target_num * args.contamination)
-    out_num = args.target_num - in_num
+#     in_num = int(args.target_num * args.contamination)
+#     out_num = args.target_num - in_num
 
-    in_data_subset = Dataset.from_dict(in_dataset[:in_num])
-    out_data_subset = Dataset.from_dict(out_dataset[:out_num])
-    in_labels = [1] * in_num
-    out_labels = [0] * out_num
+#     in_data_subset = Dataset.from_dict(in_dataset[:in_num])
+#     out_data_subset = Dataset.from_dict(out_dataset[:out_num])
+#     in_labels = [1] * in_num
+#     out_labels = [0] * out_num
 
-    return in_data_subset, out_data_subset, in_labels, out_labels
+#     return in_data_subset, out_data_subset, in_labels, out_labels
 
 
-def merge_and_get_labels(args, in_embs, out_embs):
+# def merge_and_get_labels(args, in_embs, out_embs):
 
-    if len(in_embs) == 0 :
-        emb_dict = out_embs
-        labels = [0] * out_embs[1].shape[0]
-    elif len(out_embs) == 0 :
-        emb_dict = in_embs 
-        labels = [1] * in_embs[1].shape[0]
-    else :
-        emb_dict = {}
-        for lidx in in_embs.keys():
-            emb_dict[lidx] = torch.cat([in_embs[lidx], out_embs[lidx]])
-        labels = [1] * in_embs[1].shape[0] + [0] * out_embs[1].shape[0]
+#     if len(in_embs) == 0 :
+#         emb_dict = out_embs
+#         labels = [0] * out_embs[1].shape[0]
+#     elif len(out_embs) == 0 :
+#         emb_dict = in_embs 
+#         labels = [1] * in_embs[1].shape[0]
+#     else :
+#         emb_dict = {}
+#         for lidx in in_embs.keys():
+#             emb_dict[lidx] = torch.cat([in_embs[lidx], out_embs[lidx]])
+#         labels = [1] * in_embs[1].shape[0] + [0] * out_embs[1].shape[0]
 
-    return emb_dict, labels
+#     return emb_dict, labels
 
-## Perturbation functions - by Max Khanov
-def shuffle_words_in_sentence(sentence, percentage):
-    words = sentence.split()
-    num_words_to_shuffle = int(len(words) * percentage / 100)
+# ## Perturbation functions - by Max Khanov
+# def shuffle_words_in_sentence(sentence, percentage):
+#     words = sentence.split()
+#     num_words_to_shuffle = int(len(words) * percentage / 100)
     
-    # Select random indices of words to shuffle
-    indices_to_shuffle = random.sample(range(len(words)), num_words_to_shuffle)
+#     # Select random indices of words to shuffle
+#     indices_to_shuffle = random.sample(range(len(words)), num_words_to_shuffle)
     
-    # Extract the words to shuffle
-    words_to_shuffle = [words[i] for i in indices_to_shuffle]
-    random.shuffle(words_to_shuffle)
+#     # Extract the words to shuffle
+#     words_to_shuffle = [words[i] for i in indices_to_shuffle]
+#     random.shuffle(words_to_shuffle)
     
-    # Reinsert the shuffled words back into their original indices
-    for i, index in enumerate(indices_to_shuffle):
-        words[index] = words_to_shuffle[i]
+#     # Reinsert the shuffled words back into their original indices
+#     for i, index in enumerate(indices_to_shuffle):
+#         words[index] = words_to_shuffle[i]
 
-    return ' '.join(words)
+#     return ' '.join(words)
 
-def shuffle_answers(answers, percentage):
-    answers = answers[:] # create a copy of the answers array
-    num_answers_to_shuffle = int(len(answers) * percentage / 100)
-    indices_to_shuffle = random.sample(range(len(answers)), num_answers_to_shuffle)
+# def shuffle_answers(answers, percentage):
+#     answers = answers[:] # create a copy of the answers array
+#     num_answers_to_shuffle = int(len(answers) * percentage / 100)
+#     indices_to_shuffle = random.sample(range(len(answers)), num_answers_to_shuffle)
     
-    answers_to_shuffle = [answers[i] for i in indices_to_shuffle]
-    random.shuffle(answers_to_shuffle)
+#     answers_to_shuffle = [answers[i] for i in indices_to_shuffle]
+#     random.shuffle(answers_to_shuffle)
     
-    # Reinsert the shuffled answers back into their original indices
-    for i, index in enumerate(indices_to_shuffle):
-        answers[index] = answers_to_shuffle[i]
+#     # Reinsert the shuffled answers back into their original indices
+#     for i, index in enumerate(indices_to_shuffle):
+#         answers[index] = answers_to_shuffle[i]
 
-    return answers
+#     return answers
 
-def replace_words_with_nltk(sentence, percentage):
-    words_list = words.words()  # Get a large list of English words from NLTK
-    sentence_words = sentence.split()
-    num_words_to_replace = int(len(sentence_words) * percentage / 100)
+# def replace_words_with_nltk(sentence, percentage):
+#     words_list = words.words()  # Get a large list of English words from NLTK
+#     sentence_words = sentence.split()
+#     num_words_to_replace = int(len(sentence_words) * percentage / 100)
     
-    # Select random indices of words to replace
-    indices_to_replace = random.sample(range(len(sentence_words)), num_words_to_replace)
+#     # Select random indices of words to replace
+#     indices_to_replace = random.sample(range(len(sentence_words)), num_words_to_replace)
     
-    # Replace selected words with random choices from the NLTK word list
-    for index in indices_to_replace:
-        sentence_words[index] = random.choice(words_list)
+#     # Replace selected words with random choices from the NLTK word list
+#     for index in indices_to_replace:
+#         sentence_words[index] = random.choice(words_list)
 
-    return ' '.join(sentence_words)
-
-
-def get_synonyms(word):
-    synonyms = set()
-    for syn in wordnet.synsets(word):
-        for lemma in syn.lemmas():
-            synonyms.add(lemma.name())
-    synonyms.discard(word)
-    return list(synonyms)
-
-def replace_with_synonyms(sentence, perturb_rate):
-    words = sentence.split()
-    new_sentence = []
-    for word in words:
-        if random.random() < perturb_rate:
-            synonyms = get_synonyms(word)
-            if synonyms:
-                word = random.choice(synonyms)
-        new_sentence.append(word.replace('_', ' '))
-
-    return " ".join(new_sentence)
+#     return ' '.join(sentence_words)
 
 
-def random_deleteion(sentence, perturb_rate):
-    words = sentence.split()
-    new_sentence = []
-    for word in words:
-        if random.random() > perturb_rate:
-            new_sentence.append(word)
+# def get_synonyms(word):
+#     synonyms = set()
+#     for syn in wordnet.synsets(word):
+#         for lemma in syn.lemmas():
+#             synonyms.add(lemma.name())
+#     synonyms.discard(word)
+#     return list(synonyms)
 
-    return " ".join(new_sentence)
+# def replace_with_synonyms(sentence, perturb_rate):
+#     words = sentence.split()
+#     new_sentence = []
+#     for word in words:
+#         if random.random() < perturb_rate:
+#             synonyms = get_synonyms(word)
+#             if synonyms:
+#                 word = random.choice(synonyms)
+#         new_sentence.append(word.replace('_', ' '))
+
+#     return " ".join(new_sentence)
+
+
+# def random_deleteion(sentence, perturb_rate):
+#     words = sentence.split()
+#     new_sentence = []
+#     for word in words:
+#         if random.random() > perturb_rate:
+#             new_sentence.append(word)
+
+#     return " ".join(new_sentence)

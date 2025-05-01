@@ -7,28 +7,22 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from datetime import datetime
-
 import torch
-from transformers import ReactCodeAgent, ReactJsonAgent, HfApiEngine, pipeline, TransformersEngine
-from transformers.agents import PythonInterpreterTool
-
 from rouge_score import rouge_scorer
 ROUGE = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'])
 
-from model.model_utils import get_agents, get_agent_name, engine
+
+from model.model_utils import get_agents, engine
 from data.data_utils import load_data
-from selector import select_agents
-from evaluator import test, get_initial_responses, get_instruction_suffix, evaluate_arithmetics, evaluate_mcq, base_evaluate_arithmetics, base_evaluate_mcq, evaluate_gen
-from debate import get_new_message
+from evaluator import get_instruction_suffix, evaluate_arithmetics, evaluate_mcq, base_evaluate_arithmetics, base_evaluate_mcq, evaluate_gen
 
 
-LOOKUP = {
-    'llama3.1-8b' : 'L8',
-    'llama3.2-3b' : 'L3',
-    'qwen2.5-7b' : 'Q',
-    'mistral0.3' : 'M',
-    'phi3-small' : 'P'
-}
+
+def convert_numpy(obj):
+    if isinstance(obj, np.generic):
+        return obj.item()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
 
 def get_args():
 
@@ -91,27 +85,70 @@ def get_args():
 
     return parser.parse_args()
 
-def search_best(lists, K):
-    N = len(lists)  # Total number of lists
-    best_count = 0
-    best_combination = None
 
-    # Generate all combinations of K lists
-    for indices in combinations(range(N), K):
-        selected_lists = np.array([lists[i] for i in indices])
-        
-        # Compute the mean across the selected lists
-        mean_values = np.mean(selected_lists, axis=0)
+def get_new_message(args, sample, responses, personas=None, suffix=None):
 
-        # Count how many values are greater than 0.5
-        count_over_half = np.sum(mean_values >= 0.5)
+    new_message = {}
 
-        # Update the best combination
-        if count_over_half > best_count:
-            best_count = count_over_half
-            best_combination = indices
+    agents = list(responses.keys())
+    if len(agents) > 1 : # MULTI-AGENT DEBATE
 
-    return best_combination, best_count
+        if not args.centralized : # DECENTRALIZED MAD
+            for i, agent in enumerate(agents) :
+                msg = "These are the recent opinions from other agents: "
+                if args.sparse :
+                    peers = [agents[(i-1) % len(agents)], agents[(i+1) % len(agents)]]
+                else :
+                    peers = agents[:i]+agents[i+1:]
+                for other_agent in peers:
+                    msg += f"\n\nOne of the agents' response: \n{responses[other_agent]}\n"
+                msg += f"\n\nThis was your most recent opinion:\n{responses[agents[i]]}\n"
+                msg += f'\n\nUse these opinions carefully as additional advice to revise your recent opinion to give your final answer to the question:\n{sample}'
+
+                if suffix is not None :
+                    msg += suffix
+
+                if personas is not None :
+                    new_message[agent] = [{'role': 'system', 'content': personas[agent.split("__")[-2]]},{'role': 'user', 'content': msg}]
+                else :
+                    new_message[agent] = {'role': 'user', 'content': msg}
+
+        else : # CENTRALIZED MAD
+            for i, agent in enumerate(agents):
+                if i == 0 :
+                    msg = "These are the recent opinions from other agents: "
+                    peers = agents[:i]+agents[i+1:]
+                    for other_agent in peers:
+                        msg += f"\n\nOne of the agents' response: \n{responses[other_agent]}\n"
+                    msg += f"\n\nThis was your most recent opinion:\n{responses[agents[i]]}\n"
+                    msg += f'\n\nUse these opinions carefully as additional advice to revise your recent opinion to give your final answer to the question:\n{sample}'
+                else :
+                    msg = f"This is the recent opinion from another agent: \n{responses[agents[0]]}\n"
+                    msg += f"\n\nThis was your most recent opinion:\n{responses[agents[i]]}\n"
+                    msg += f'\n\nUse these opinions carefully as additional advice to revise your recent opinion to give your final answer to the question:\n{sample}'
+                
+                if suffix is not None :
+                    msg += suffix
+
+                if personas is not None :
+                    new_message[agent] = [{'role': 'system', 'content': personas[agent.split("__")[-2]]},{'role': 'user', 'content': msg}]
+                else :
+                    new_message[agent] = {'role': 'user', 'content': msg}
+
+    else : # SINGLE AGENT SELF REFINEMENT
+        for i, agent in enumerate(agents) :
+            msg = f"This was your most recent opinion:\n{responses[agents[i]]}\n"
+            msg += f'\n\nRevise your recent opinion to give your updated final answer to the question:\n{sample}'
+
+            if suffix is not None :
+                msg += suffix
+
+            if personas is not None :
+                new_message[agent] = [{'role': 'system', 'content': personas[agent.split("__")[-2]]},{'role': 'user', 'content': msg}]
+            else :
+                new_message[agent] = {'role': 'user', 'content': msg}
+
+    return new_message
 
 
 def main(args):
@@ -127,9 +164,7 @@ def main(args):
     fname = f"{args.data}_{args.data_size}__{args.model}_N={args.num_agents}_R={args.debate_rounds}"
     if args.sparse : fname += '_SPARSE'
     elif args.centralized : fname += '_CENTRAL'
-
     if args.bae : fname += '_BAE'
-    if args.cot : fname += '_COT'
     if args.multi_persona : fname += '_HETERO'
 
     agent_names = []
@@ -164,9 +199,8 @@ def main(args):
 
     if args.continue_round is not None :
         load_fname = fname.replace(f"R={args.debate_rounds}", f"R={args.continue_round}")
-        with open(f'out/debate/{load_fname}.pkl', "rb") as f : 
-            sample_responses = pickle.load(f)
-        
+        with open(f'out/history/{load_fname}.jsonl', "r") as f : 
+            sample_responses = [json.loads(line) for line in f]
 
     for i, (x, y) in tqdm(enumerate(zip(test_X, test_Y)), total=len(test_X)):
 
@@ -211,15 +245,16 @@ def main(args):
                     'debate_answer_iscorr': is_corr,
                     'answer': y,
                 }
-            rounds_data_dict = {0 : round_data}
+            rounds_data_dict = {'0': round_data}
             round_iscorr.append(is_corr)
 
             start = 1
+
         else :
             rounds_data_dict = sample_responses[i]
             round_iscorr = [rounds_data_dict[j]['debate_answer_iscorr'] for j in rounds_data_dict.keys()]
             
-            recent = rounds_data_dict[args.continue_round]
+            recent = rounds_data_dict[str(args.continue_round)]
             agent_responses = recent['responses']
             final_resps = recent['final_answers']
             debate_resps = recent['debate_answer']
@@ -227,8 +262,10 @@ def main(args):
             
             start = args.continue_round + 1
 
+
         # begin debate
         for r in range(start, args.debate_rounds+1) :
+
             print(f"Debating round {r}...")
             if args.multi_persona:
                 new_agent_messages = get_new_message(args, x, agent_responses, personas, suffix=SUFFIX)
@@ -281,14 +318,20 @@ def main(args):
                     'debate_answer_iscorr': is_corr,
                     'answer': y,
                 }
-            rounds_data_dict[r] = round_data
+            rounds_data_dict[str(r)] = round_data
             round_iscorr.append(is_corr)
 
-        sample_responses.append(rounds_data_dict)
+        if args.continue_round is not None:
+            sample_responses[i] = rounds_data_dict
+        else :
+            sample_responses.append(rounds_data_dict)
         iscorr_list.append(round_iscorr)
-        
-        with open(f'out/debate/{fname}.pkl', 'wb') as f :
-            pickle.dump(sample_responses, f)
+
+        # Save to jsonl
+        print(len(sample_responses))
+        with open(f'out/history/{fname}.jsonl', 'w') as f:
+            for record in sample_responses:
+                f.write(json.dumps(record, default=convert_numpy) + '\n')
             
         if args.data in ['cnn_daily'] :
             rouge1s, rouge2s, rougeLs = [], [], []
@@ -313,98 +356,6 @@ def main(args):
 
 
 
-def eval_mad(args): # TODO Amend
-    list_of_agents = ['L8','L3','M','Q','P']
-    anchor_agent = None
-
-    K_list = []
-    for K in range(1,6):
-        ma_list = []
-        for agents in combinations(list_of_agents, K):
-
-            try:
-                if args.alpha == 0.0 :
-                    file_name = 'out/debate/arithmetics_100'
-                else :
-                    file_name = f'out/debate/arithmetics_100_alpha{args.alpha}'
-
-
-                if anchor_agent is not None and anchor_agent not in list(agents) :
-                    continue
-                else :
-                    for agent in list(agents):
-                        file_name = file_name + f'__{agent}'
-
-                file_name = file_name + '.pkl'
-                with open(file_name,'rb') as f :
-                    data = pickle.load(f)
-            except :
-                continue
-
-            # debate performance for each round
-            sample_corr = []
-            for sample in data :
-                round_corr = []
-                for d_round in range(6):
-                    if anchor_agent is not None :
-                        round_corr.append(int(sample[d_round]['final_answer_iscorr'][agents.index(anchor_agent)]))
-                    else :
-                        round_corr.append(int(sample[d_round]['debate_answer_iscorr']))
-                sample_corr.append(round_corr)
-            sample_acc = np.array(sample_corr).mean(0)
-            ma_list.append(sample_acc)
-            print(file_name, sample_acc)
-        K_list.append(ma_list)
-
-    # Box-and-whisker for each debate round
-    for d_round in range(6):
-        examples = [np.array(x)[:,d_round] for x in K_list]
-
-        plt.figure(figsize=(8,6))
-        boxprops = dict(facecolor='lightblue', edgecolor='black')  # Transparent boxes
-        medianprops = dict(color='red', linewidth=3.0)  # Median line properties
-
-
-        plt.boxplot(examples, tick_labels=[f'Size {i}' for i in range(1,6)], patch_artist=True, boxprops=boxprops, medianprops=medianprops)
-
-        # Add title and labels
-        plt.title(f"Debate Round {d_round}")
-        plt.xlabel("Agent Set Size")
-        plt.ylabel("Accuracy")
-
-        # Show the plot
-        if anchor_agent is not None :
-            plt.savefig(f'out/boxplot_debate_round{d_round}_anchor={anchor_agent}.png')
-            plt.close()
-        else :
-            plt.savefig(f'out/boxplot_debate_round{d_round}.png')
-            plt.close()
-
-
-    # Box-and-whisker for each agent size
-    for size in range(1, 6):
-        examples = [np.array(K_list[size-1])[:,i] for i in range(6)]
-
-        plt.figure(figsize=(8,6))
-        boxprops = dict(facecolor='lightblue', edgecolor='black')  # Transparent boxes
-        medianprops = dict(color='red', linewidth=3.0)  # Median line properties
-
-        plt.boxplot(examples, tick_labels=[f'Round {i}' for i in range(6)], patch_artist=True, boxprops=boxprops, medianprops=medianprops)
-
-        # Add title and labels
-        plt.title(f"Agent Size = {size}")
-        plt.xlabel("Debate Round")
-        plt.ylabel("Accuracy")
-
-        # Show the plot
-        if anchor_agent is not None :
-            plt.savefig(f'out/boxplot_agent_size{size}_anchor={anchor_agent}.png')
-            plt.close()
-        else :
-            plt.savefig(f'out/boxplot_agent_size{size}.png')
-            plt.close()
-
-
 if __name__ == "__main__":
     
     args = get_args()
@@ -421,8 +372,5 @@ if __name__ == "__main__":
         token = f.read()
     args.token = token
 
-    if args.eval :
-        eval_mad(args)
-    else :
-        main(args)
+    main(args)
     
